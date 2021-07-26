@@ -90,7 +90,7 @@ namespace HomeworkCLI
                 string model = Console.ReadLine();
                 Console.Write("Mac address:");
                 string mac = Console.ReadLine();
-                File.WriteAllText(Path.Combine(Directory.GetCurrentDirectory(), "userDeviceSettings.dat"), );
+                File.WriteAllText(Path.Combine(Directory.GetCurrentDirectory(), "userDeviceSettings.dat"), $"{{model:\"{model}\",mac:\"{mac}\"}}");
                 user.Machine = model;
                 user.Mac = mac;
 #endif
