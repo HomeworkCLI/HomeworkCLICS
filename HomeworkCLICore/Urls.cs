@@ -377,5 +377,6 @@ namespace HomeworkCLI
         public const string getNEStudent = baseUrl + "/Netease/NEUser-getNEStudent";
         public const string fileCallbackDomain = "http =//open.changyan.com";
         public const string loggerDomain = "http =//logservice.changyan.com";
+        public const string getOssSecretKeyNew = baseUrl + "jcservice/sts/getToken";
     }
 }

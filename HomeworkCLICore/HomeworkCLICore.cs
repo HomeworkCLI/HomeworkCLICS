@@ -19,7 +19,7 @@ namespace HomeworkCLI
         public string CycoreId { get; set; } = string.Empty;
         public string DisplayName { get; set; } = string.Empty;
         public string BaseUrl { get; set; } = "http://www.yixuexiao.cn/";
-        public string Mac { get; set; } = "00:01:02:04:05:06";
+        public string Mac { get; set; } = "07:91:2B:0D:55:8B";
         public string Machine { get; set; } = "Google Pixel 3 XL";
         public string OsVersion { get; set; } = "11.0";
 
@@ -34,7 +34,7 @@ namespace HomeworkCLI
                 { "device", "mobile" },
                 { "isforce", isforce.ToString().ToLower() },
                 { "usertype", usertype.ToString() },
-                { "appVersion", "v3.8.9.3" }
+                { "appVersion", "v3.8.9.4" }
             })).ContinueWith(antecendent =>
             {
                 if (antecendent.Result.Value<int>("code") == 1)
@@ -344,6 +344,33 @@ namespace HomeworkCLI
                 { "userid", this.Userid}
             }));
         }
+        public Task<JObject> getOssSecretKeyNew()
+        {
+            long timestamp = (DateTime.Now.ToUniversalTime().Ticks - 621355968000000000) / 10000;
+            StringBuilder stringBuilder = new StringBuilder();
+            using (MD5 md5Hash = MD5.Create())
+            {
+                byte[] data = md5Hash.ComputeHash(Encoding.UTF8.GetBytes(this.Userid + "appId" + timestamp + "456FDB96EBB94035A926827139EA4216"));
+                foreach (byte b in data)
+                {
+                    string tmp = (b & 0xff).ToString("x2");
+                    if (tmp.Length == 1)
+                    {
+                        tmp = "0" + tmp;
+                    }
+                    stringBuilder.Append(tmp);
+                }
+            }
+            return this.Post(
+                Urls.getOssSecretKeyNew,
+                new Dictionary<string, string>
+                {
+                    { "userId", this.Userid },
+                    { "timestamp", timestamp.ToString() },
+                    { "appId", "appId" },
+                    { "sign", stringBuilder.ToString() }
+                });
+        }
 
         private Dictionary<string, string> EncryptFormData(Dictionary<string, string> formData, bool hasToken = true)
         {
@@ -412,7 +439,13 @@ namespace HomeworkCLI
                 dictionaryStringBuilder.Append('&');
             }
             webClient.Headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded";
-            return webClient.UploadStringTaskAsync(url, dictionaryStringBuilder.ToString().TrimEnd('&')).ContinueWith(antecendent => JObject.Parse(antecendent.Result));
+            return webClient.UploadDataTaskAsync(url, Encoding.UTF8.GetBytes(dictionaryStringBuilder.ToString().TrimEnd('&'))).ContinueWith(antecendent =>
+            {
+#if DEBUG
+                Console.WriteLine(Encoding.UTF8.GetString(antecendent.Result));
+#endif
+                return JObject.Parse(Encoding.UTF8.GetString(antecendent.Result));
+            });
         }
     }
     public class WorkInfo

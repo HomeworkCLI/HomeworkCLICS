@@ -14,7 +14,7 @@ namespace HomeworkCLI
     internal class HomeworkCLI
     {
         private static readonly HomeworkCLICore user = new HomeworkCLICore();
-        private static readonly OssClient ossClient = new OssClient("http://oss-cn-hangzhou.aliyuncs.com", "LTAI4G8HWjQYmcTk735N1zxu", "WnoFodPmNvhT1wjnh73CiMf3QTaNnB");
+        private static OssClient ossClient;
 
         [STAThread]
         private static void Main(string[] args)
@@ -82,6 +82,7 @@ namespace HomeworkCLI
                 Console.WriteLine("Welcome to HomeworkCLI");
                 Console.WriteLine("By pressing any key you have read and agreed to the open source agreement(Apache License 2.0) of this software.");
                 _ = Console.ReadKey(true);
+#if !DEBUG
                 Console.WriteLine("We need to collect some basic information to make sure the software run smoothly.");
                 Console.WriteLine("Firstly, please enter the model and mac address you want to use.");
                 Console.WriteLine("We need this because login will be recorded by iFlyTek and cannot be deleted.");
@@ -89,9 +90,10 @@ namespace HomeworkCLI
                 string model = Console.ReadLine();
                 Console.Write("Mac address:");
                 string mac = Console.ReadLine();
-                File.WriteAllText(Path.Combine(Directory.GetCurrentDirectory(), "userDeviceSettings.dat"), $"{{model:\"{model}\",mac:\"{mac}\"}}");
+                File.WriteAllText(Path.Combine(Directory.GetCurrentDirectory(), "userDeviceSettings.dat"), );
                 user.Machine = model;
                 user.Mac = mac;
+#endif
                 Console.WriteLine("Secondly, please login your account");
                 Console.Write("username: ");
                 string username = Console.ReadLine();
@@ -137,7 +139,11 @@ namespace HomeworkCLI
             }
             #endregion Init
             user.ClientLoginWithJSON(File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(), "userDetailInfo.dat")));
+#if DEBUG
+            JObject userDeviceSettings = JObject.Parse($"{{model:\"{user.Machine}\",mac:\"{user.Mac}\"}}");
+#else
             JObject userDeviceSettings = JObject.Parse(File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(), "userDeviceSettings.dat")));
+#endif
             user.Machine = userDeviceSettings.Value<string>("model");
             user.Mac = userDeviceSettings.Value<string>("mac");
             Console.WriteLine($"Hi, {user.DisplayName}");
@@ -152,11 +158,31 @@ namespace HomeworkCLI
                 };
                 if (dialog.ShowDialog() == DialogResult.OK)
                 {
+                    Console.WriteLine($"start get sts token");
+                    JObject getOssSecretKeyNewResult = user.getOssSecretKeyNew().Result;
+                    JObject ossInfo = JObject.Parse(rc4Decrypt(getOssSecretKeyNewResult.Value<string>("data")));
+                    Console.WriteLine($"sts token successfully got");
+#if DEBUG
+                    Console.WriteLine($"sts token: accessKeyId={ossInfo.Value<string>("accessKeyId")}");
+                    Console.WriteLine($"sts token: accessKeySecret={ossInfo.Value<string>("accessKeySecret")}");
+                    Console.WriteLine($"sts token: securityToken={ossInfo.Value<string>("securityToken")}");
+                    Console.WriteLine($"sts token: expiration={ossInfo.Value<string>("expiration")}");
+#endif
+                    ossClient = new OssClient("http://oss-cn-hangzhou.aliyuncs.com",
+                        ossInfo.Value<string>("accessKeyId"),
+                        ossInfo.Value<string>("accessKeySecret"),
+                        ossInfo.Value<string>("securityToken"));
                     foreach (string file in dialog.FileNames)
                     {
                         string uuid = Guid.NewGuid().ToString();
                         Console.WriteLine($"start uploading {file}");
-                        ossClient.PutObject("yixuexiao-2", $"aliba/upload/HomeworkUpload/{uuid}/0.0{Path.GetExtension(file)}", file);
+                        using (var fs = File.Open(file, FileMode.Open))
+                        {
+                            var putObjectRequest = new PutObjectRequest("yixuexiao-2", $"aliba/upload/HomeworkUpload/{uuid}/0.0{Path.GetExtension(file)}", fs);
+                            putObjectRequest.StreamTransferProgress += streamProgressCallback;
+                            ossClient.PutObject(putObjectRequest);
+                        }
+                        Console.WriteLine();
                         Console.WriteLine($"successfully uploaded, uuid: {uuid}");
                         DocInfo docInfo = new DocInfo
                         {
@@ -181,7 +207,7 @@ namespace HomeworkCLI
                         };
                         JObject saveDocInfo = user.SaveDocNew(docInfo).Result;
                         Console.WriteLine($"saveDocNew data: {saveDocInfo.Value<string>("msg")}");
-                        Console.WriteLine($"shar data: {user.ShareDoc("1", string.Empty, saveDocInfo.Value<JObject>("data").Value<string>("docid"), user.Userid).Result.Value<string>("msg")}");
+                        Console.WriteLine($"share data: {user.ShareDoc("1", string.Empty, saveDocInfo.Value<JObject>("data").Value<string>("docid"), user.Userid).Result.Value<string>("msg")}");
                     }
                 }
                 Console.WriteLine("Press any key to upload more files.");
@@ -189,24 +215,64 @@ namespace HomeworkCLI
             }
         }
 
-        private class OssUploadThread
+        private static string rc4Decrypt(string input)
         {
-            private readonly string bucket = "yixuexiao-2";
-            private readonly string key = string.Empty;
-            private readonly string file = string.Empty;
-
-            public OssUploadThread(string key, string file)
+            // #region rc4 decrypt
+            int size = input.Length;
+            byte[] ret = new byte[(size / 2)];
+            byte[] tmp = Encoding.UTF8.GetBytes(input);
+            for (int i = 0; i < size / 2; i++)
             {
-                this.key = key;
-                this.file = file;
+                char b0 = (char)(((char)Convert.ToByte(Encoding.UTF8.GetString(new byte[] { tmp[i * 2] }), 16)) << 4);
+                ret[i] = (byte)(b0 ^ ((char)Convert.ToByte(Encoding.UTF8.GetString(new byte[] { tmp[i * 2 + 1] }), 16)));
+            }
+            byte a = 0;
+            byte[] b = { a };
+            byte[] raw = new byte[input.Length / 2];
+            for (int i = 0; i < raw.Length; i++)
+            {
+                raw[i] = Convert.ToByte(input.Substring(i * 2, 2), 16);
             }
 
-            public void Upload()
+            byte[] bkey = Encoding.UTF8.GetBytes("FD4DB9C94A694B87A34DDC563B36010E");
+            byte[] state = new byte[256];
+            for (int i = 0; i < 256; i++)
             {
-                Console.WriteLine("1");
-                ossClient.PutObject(this.bucket, this.key, this.file);
+                state[i] = (byte)i;
             }
+            int index1 = 0;
+            int index2 = 0;
+            if (bkey == null || bkey.Length == 0)
+            {
+                state = null;
+            }
+            for (int i2 = 0; i2 < 256; i2++)
+            {
+                index2 = ((bkey[index1] & 255) + (state[i2] & 255) + index2) & 255;
+                byte tmp2 = state[i2];
+                state[i2] = state[index2];
+                state[index2] = tmp2;
+                index1 = (index1 + 1) % bkey.Length;
+            }
+
+            int x = 0;
+            int y = 0;
+            byte[] key = state;
+            byte[] result = new byte[ret.Length];
+            for (int i = 0; i < ret.Length; i++)
+            {
+                x = (x + 1) & 255;
+                y = ((key[x] & 255) + y) & 255;
+                byte tmp3 = key[x];
+                key[x] = key[y];
+                key[y] = tmp3;
+                result[i] = (byte)(ret[i] ^ key[((key[x] & 255) + (key[y] & 255)) & 255]);
+            }
+            return Encoding.UTF8.GetString(result);
+        }
+        private static void streamProgressCallback(object sender, StreamTransferProgressArgs args)
+        {
+            Console.Write($"\rProgress: {((double)args.TransferredBytes / args.TotalBytes):0.00%}");
         }
     }
-
 }
