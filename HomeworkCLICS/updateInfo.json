@@ -1,7 +1,7 @@
 {
-  "version": "2.0.0-alpha",
-  "versionCode": 202105271,
-  "updateDetails": "重写代码，修复功能",
-  "downloadUrl": "http://fs.yixuexiao.cn/aliba/upload/HomeworkUpload/HomeworkCLI/2.0.0-alpha/release.zip",
-  "hashCode": "5D4F0FFD3A65A969CAD7D981C9DA2C720814D59EA98C0AB67A8D88AA11EF599A"
+  "version": "2.0.1-alpha",
+  "versionCode": 202107261,
+  "updateDetails": "修复上传功能",
+  "downloadUrl": "http://fs.yixuexiao.cn/aliba/upload/HomeworkUpload/HomeworkCLI/2.0.1-alpha/release.zip",
+  "hashCode": "22D0243EE7DB9FDBCF140A59316A3B5A9F9D60955367AC64F06CB11F3B039C01"
 }
